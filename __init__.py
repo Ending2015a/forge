@@ -197,7 +197,7 @@ def dictionarize(function, name: str=None, inputs: set=set()):
         'append_kwargs_to_fields': append_kwargs_to_fields,
         }
 
-    namespace = {}
+    namespace = {func_name: function}
 
     forged_class = _forge_func(class_name, 
                                _dictionarize_scode_template,
