@@ -38,7 +38,7 @@ def _forge_func(name, source, kwargs, namespace):
 _dictionarize_scode_template = '''\
 from builtins import dict as _dict
 from builtins import property as _property
-from operator ipmort itemgetter as _itemgetter
+from operator import itemgetter as _itemgetter
 
 
 class {class_name}(dict):
@@ -56,16 +56,16 @@ class {class_name}(dict):
         super({class_name}, self).__init__({{ {kwargs_list} }})
         {append_kwargs_to_fields}
 
-    def __call__(self, {input_param_list}, **_) {return_annotation}:
+    def __call__(self, {input_param_list} **_) {return_annotation}:
         \'\'\'
         Call function
         \'\'\'
 
-        _ = {**self, **_}
+        _ = {{**self, **_}}
 
-        {pop_args}
+        {pop_args} # pop args from _
 
-        return {func_name}({input_param_list}, {unpack_args} **_)
+        return {func_name}({func_param_list}**_)
 
     def __repr__(self):
         return '{class_name}({{}})'.format(', '.join(
@@ -111,7 +111,6 @@ def dictionarize(function, name: str=None, inputs: set=set()):
 
     _input_params = set(inputs)
 
-
     # prepare
     func_name = function.__name__
     class_name = name if name is not None else func_name.replace('_', ' ').title().replace(' ', '')
@@ -125,7 +124,8 @@ def dictionarize(function, name: str=None, inputs: set=set()):
     input_fields = []
     param_fields = []
     property_list = []
-    unpack_args = ''
+    func_param_list = []
+    #unpack_args = ''
     pop_args = ''
     return_annotation = ''
     append_kwargs_to_fields = ''
@@ -147,51 +147,71 @@ def dictionarize(function, name: str=None, inputs: set=set()):
             input_fields.append('{!r}'.format(param.name))
             input_param_list.append(str(param))
 
+            if param.kind == param.KEYWORD_ONLY:
+                func_param_list.append('{0}={0}'.format(param.name))
+            elif param.kind == param.VAR_POSITIONAL:
+                func_param_list.append(str(param))
+            else:
+                func_param_list.append(param.name)
+
         # not input
         else:
             # __init__ signature
-            param_fields.append('{!r}'.format(param.name))
             param_list.append(str(param))
     
             # variable-length positional argument
             if param.kind == param.VAR_POSITIONAL:
+                param_fields.append('{!r}'.format(param.name))
                 # kw
                 kwargs_list.append('{0!r}: {0}'.format(param.name))
                 args_name = param.name
 
-                unpack_args = '*{},'.format(args_name)
                 pop_args = '{0} = _.pop({0!r}, [])'.format(args_name)
 
                 property_list.append(_property_scode_template.format(property_name=param.name))
+
+                func_param_list.append(str(param))
 
             # variable-length keyword argument
             elif param.kind == param.VAR_KEYWORD:
                 # unpack kwargs
                 kwargs_list.append(str(param))
                 kwargs_name = param.name
-                append_kwargs_to_fields = 'self._field.extend(list({}.keys()))'.format(param.name)
+                append_kwargs_to_fields = 'self._fields.extend(list({}.keys()))'.format(param.name)
 
             # others
             else:
+                param_fields.append('{!r}'.format(param.name))
                 # kw
                 kwargs_list.append('{0!r}: {0}'.format(param.name))
-                property_list.append(_property_template.format(property_name=param.name))
+                property_list.append(_property_scode_template.format(property_name=param.name))
 
-                repr_list.append('{0}={{}}'.format(param.name))
-                repr_param_list.append('{0}=self._field[{0!r}]'.format(param.name))
+                if (param.kind == param.POSITIONAL_ONLY or
+                      (param.kind == param.POSITIONAL_OR_KEYWORD and param.default is param.empty)):
+                    func_param_list.append('_.pop({!r})'.format(param.name))
+
+
+
+    if len(input_param_list) > 0:
+        # append empty str to add an extra ',' to the tail of ', '.join(input_param_list) 
+        input_param_list.append('')
+
+    if len(func_param_list) > 0:
+        # append empty str to add an extra ',' to the tail of ', '.join(input_param_list) 
+        func_param_list.append('')
         
     source_vars = {
         'func_name': func_name,
         'class_name': class_name,
         'signature': signature,
         'return_annotation': return_annotation,
-        'param_list': param_list,
-        'kwargs_list': kwargs_list,
-        'input_param_list': input_param_list,
-        'input_fields': input_fields,
-        'param_fields': param_fields,
-        'property_list': property_list,
-        'unpack_args': unpack_args,
+        'param_list': ', '.join(param_list),
+        'kwargs_list': ', '.join(kwargs_list),
+        'input_param_list': ', '.join(input_param_list),
+        'input_fields': ', '.join(input_fields),
+        'param_fields': ', '.join(param_fields),
+        'property_list': ''.join(property_list),
+        'func_param_list': ', '.join(func_param_list),
         'pop_args': pop_args,
         'return_annotation': return_annotation,
         'append_kwargs_to_fields': append_kwargs_to_fields,
