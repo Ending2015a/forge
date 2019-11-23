@@ -26,7 +26,6 @@ def _forge_func(name, source, kwargs, namespace):
 
     _source = source.format(**kwargs)
 
-    print(_source)
 
     exec(_source, local_namespace)
 
