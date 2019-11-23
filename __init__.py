@@ -26,6 +26,8 @@ def _forge_func(name, source, kwargs, namespace):
 
     _source = source.format(**kwargs)
 
+    print(_source)
+
     exec(_source, local_namespace)
 
     func = locals()[name]
@@ -239,14 +241,10 @@ class ParameterPack(OrderedDict):
     _parameterpack_scode_template = '''\
 def {name}{signature}:
     arg_list = [{kwpair_list!s}]
-
-    {unpack_kwargs_code}
-
+{unpack_kwargs_code}
     # create OrderedDict, cls = ParameterPack
     package = cls(arg_list)
-
-    {setattr_package_code}
-
+{setattr_package_code}
     return package
 '''
 
@@ -390,8 +388,10 @@ def {name}{signature}:
                     kwpair_list.append("('{0}', {0})".format(param.name, param.name))
 
 
-
-            func_name = '_ParameterPack{}'.format(method.__name__)
+            if (not method.__name__[0].isalpha()) or method.__name__[0].isupper():
+                func_name = '_ParameterPack{}'.format(method.__name__)
+            else:
+                func_name = '_ParameterPack_{}'.format(method.__name__)
 
 
             # if target is not None, the parameter pack will be attached in the forged wrapper_method
@@ -401,20 +401,20 @@ def {name}{signature}:
                     raise RuntimeError('Unknown target: {}'.format(target_object))
 
                 # generate code for setattr
-                setattr_package_code = _setattr_package_scode_template.format(target=target_object, property=name)
+                setattr_package_code = cls._setattr_package_scode_template.format(target=target_object, property=name)
 
 
             # generate code for unpacking kwargs
             if need_unpack_kwargs:
-                unpack_kwargs_code = _unpack_kwargs_scode_template.format(kwargs_name=kwargs_name)
+                unpack_kwargs_code = cls._unpack_kwargs_scode_template.format(kwargs_name=kwargs_name)
 
             # === forging function ===
             source_vars = {
                 'name': func_name,
                 'signature': str(sign),
                 'kwpair_list': ', '.join(kwpair_list),
-                'unpack_kwargs_code': need_unpack_kwargs,
-                'setattr_package_code': setattr_package,
+                'unpack_kwargs_code': unpack_kwargs_code,
+                'setattr_package_code': setattr_package_code,
             }
 
             namespace = {'cls': cls}
@@ -438,10 +438,10 @@ def {name}{signature}:
 
             # assign attributes
             # (! __wrapped__ will be eliminated)
-            _parameterpack__init__.__dict__ = method.__dict__
+            _parameterpack__wrapped__.__dict__ = method.__dict__
 
 
-            return _parameterpack__init__
+            return _parameterpack__wrapped__
 
         return _wrapper
 
