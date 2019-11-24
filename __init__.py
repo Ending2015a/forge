@@ -261,8 +261,7 @@ def {name}{signature}:
         self.__dict__ = self
 
     def __iter__(self):
-        for v in self.values():
-            yield v
+        yield from self.values()
 
     @classmethod
     def pack(cls, name='args', target=0, unpack_kwargs=False, store_kwargs=True, ignore_first=True, ignore=[]):

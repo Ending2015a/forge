@@ -63,3 +63,42 @@ print(c)
 
 print(' ::: call function: c(1, e=2)')
 c(1, e=2)
+
+
+from forge import ParameterPack
+
+class A():
+    @ParameterPack.pack(name='args')
+    def __init__(self, a, b, *args, d, e=20, f=30, **kwargs):
+
+        pass
+
+    def print_args(self):
+        print(self.args)
+
+    def print_kwargs(self):
+        a, b, args, d, e, *_ = self.args
+
+        print('{}/{}/{}/{}/{}'.format(a, b, d, e, args))
+
+
+a = A(1, 2, 3, 4, 5, 6, d=7, hello='hhh')
+
+a.print_args()
+a.print_kwargs()
+
+@ParameterPack.pack(name='args', target=None)
+def method2(a, b, *args, d, e=20, f=30, **kwargs):
+    print('in method2: ', method2.args)
+
+
+@ParameterPack.pack(name='args', target=None)
+def method1(a, b, *args, d, e=20, f=30, **kwargs):
+    print('begin method1: ', method1.args)
+    method2(a, b, *args, d=d, e=e, f=f, hello='method2')
+
+    print('method1.args is method2.args: {}'.format(method1.args is method2.args))
+    print('end method1: ', method1.args)
+
+
+method1(1, 2, 3, 4, 5, 6, d=7, e=100, f=200, hello='method1')
