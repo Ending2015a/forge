@@ -258,10 +258,16 @@ def {name}{signature}:
 
     def __init__(self, *args, **kwargs):
         super(ParameterPack, self).__init__(*args, **kwargs)
-        self.__dict__ = self
+        object.__setattr__(self, '__dict__', self)
 
     def __iter__(self):
         yield from self.values()
+
+    def __setattr__(self, name, value):
+        self.__setitem__(name, value)
+
+    def __delattr__(self, name):
+        self.__delitem__(name)
 
     @classmethod
     def pack(cls, name='args', target=0, unpack_kwargs=False, store_kwargs=True, ignore_first=True, ignore=[]):
