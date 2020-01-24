@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+import types
 import inspect
 import logging
 import functools
@@ -15,7 +16,8 @@ from collections import OrderedDict
 
 __all__ = [
     'dictionarize',
-    'ParameterPack'
+    'ParameterPack',
+    'argshandler',
 ]
 
 
@@ -227,6 +229,8 @@ def dictionarize(function, name: str=None, inputs: set=set()):
 
     return forged_class
     
+
+
 
 class ParameterPack(OrderedDict):
     '''
@@ -448,4 +452,186 @@ def {name}{signature}:
             return _parameterpack__wrapped__
 
         return _wrapper
+
+
+'''
+argshandler
+
+Example
+
+>>> class SubA(argshandler(sig='self, b, c')):
+...    def __init__(self, _self, b, c, **kwargs):
+...        super(SubA, self).__init__(_self, b, c)
+
+>>> class A():
+...    def __init__(self):
+...        pass
+...    @SubA.serve(args=['self', 'b', 'c'], callback=lambda *args, **kwargs: args[0])
+...    def func(self, a, b, *args, c, d=None, **kwargs):
+...        print(a, b, args, c, d, kwargs)
+...    def create_subA(self, b, c):
+...        return SubA(self, b, c)
+
+>>> a = A()
+>>> a.create_subA(b='b', c='c').func('a', 1, 2, 3, d='dd', foo='bar')
+
+'''
+
+
+class _all:
+    def __str__(self):
+        return 'all'
+
+class _self:
+    def __str__(self):
+        return 'self'
+
+def _argshandler__init__(self, *args, **kwargs):
+    self._argshandler_bound_args = self._handler_sig.bind(*args, **kwargs)
+    self._argshandler_bound_args.apply_defaults()
+
+def _argshandler_serve(cls, args=_all, callback=_self):
+    '''
+    serve
+
+    Args:
+        cls: class object
+        args: (list of str) argument name to serve
+        callback: (Function) callback function
+    '''
+    if args is _all:
+        args = list(cls._handler_sig.parameters.keys())
+        #args = list(self._argshandler_bound_args.arguments.keys())
+
+    def _generate_func(func, callback):
+        '''
+        Generate function
+        Args:
+            func: (Function) target function
+            callback: (Function) callback function
+        '''
+
+        _argshandler_func_scode_template='''\
+def _gened_func{signature}:
+
+    default_params = _argshandler_self._argshandler_bound_args.arguments
+    params = {dictionarize_code}
+    default_params.update(params)
+    
+    boundargs = inspect.BoundArguments(func_sig, default_params)
+
+    args = boundargs.args
+    kwargs = boundargs.kwargs
+
+    returns = _gened_func.func(*args, **kwargs)
+
+    {callback_code}
+'''
+        func_sig = inspect.signature(func)
+        target_args = [inspect.Parameter('_argshandler_self', inspect.Parameter.POSITIONAL_OR_KEYWORD)]
+
+        # remove not served args
+        for arg in func_sig.parameters.keys():
+            if arg not in args:
+                target_args.append(func_sig.parameters[arg])
+
+
+        # create signature
+        target_sig = func_sig.replace(parameters=target_args)
+        target_sig_no_self = func_sig.replace(parameters=target_args[1:])
+
+        # gen dictionarize
+        param_list = []
+        for idx, (name, param) in enumerate(target_sig_no_self.parameters.items()):
+            
+            param_list.append('({0!r}, {0})'.format(name))
+
+        
+        dictionarize_code = '_dict([' + ', '.join(param_list) + '])'
+
+
+        # callback
+        if callback is None:
+            callback_code = 'return returns'
+        elif callback is _self:
+            callback_code = 'return _argshandler_self'
+        else:
+            callback_code = 'return callback(_argshandler_self, returns, *args, **kwargs)'
+
+
+        kwargs_dict = {
+            'signature': str(target_sig),
+            'dictionarize_code': dictionarize_code,
+            'callback_code': callback_code
+        }
+
+        namespace_dict = locals()
+        namespace_dict['callback'] = callback
+        namespace_dict['func_sig'] = func_sig
+        namespace_dict['signature'] = target_sig
+        namespace_dict['_dict'] = OrderedDict
+        namespace_dict['inspect'] = inspect
+
+        gened_func = _forge_func('_gened_func', 
+                                 _argshandler_func_scode_template, 
+                                 kwargs_dict, 
+                                 namespace_dict)
+
+        gened_func.signature = target_sig
+        gened_func.func = func
+        gened_func.func_sig = func_sig
+        gened_func.callback = callback
+
+        return gened_func
+
+    def _update_func(gen_func, target_obj=None, ori_func=None):
+
+        # update func info
+        if ori_func is not None:
+            if getattr(ori_func, '__name__', None):
+                setattr(gen_func, '__name__', ori_func.__name__)
+
+            if getattr(ori_func, '__doc__', None):
+                setattr(gen_func, '__doc__', ori_func.__doc__)
+
+        if target_obj is not None:
+            setattr(gen_func, '__qualname__', '.'.join([target_obj.__qualname__, gen_func.__name__]))
+            setattr(gen_func, '__module__', target_obj.__module__)
+
+
+    def _attach_func(target_obj, gen_func, ismethod=True):
+
+        #if ismethod:
+        #    setattr(target_obj, gen_func.__name__, types.MethodType(gen_func, target_obj))
+        #else:
+        setattr(target_obj, gen_func.__name__, gen_func)
+
+    def _wrapper(func):
+
+        gened_func = _generate_func(func, callback)
+        _update_func(gened_func, cls, func)
+        _attach_func(cls, gened_func)
+
+        return func
+
+    return _wrapper
+
+
+
+def argshandler(sig=None, baseclass=()):
+    # create signature
+    if isinstance(sig, str):
+        lb = eval('lambda {sign}: None'.format(sign=sig))
+        sig = inspect.signature(lb)
+
+    if sig is None:
+        sig = inspect.signature(lambda *args, **kwargs: None)
+
+    assert isinstance(sig, inspect.Signature), 'sig must be an inspect.Signature'
+
+    return type('ArgsHandler',
+                baseclass,
+                {'_handler_sig': sig,
+                 '__init__': _argshandler__init__,
+                 'serve': classmethod(_argshandler_serve)})
 

@@ -1,5 +1,5 @@
 from forge import dictionarize
-
+from forge import argshandler
 
 
 # a, b, c: positional_or_keyword without default value
@@ -102,3 +102,35 @@ def method1(a, b, *args, d, e=20, f=30, **kwargs):
 
 
 method1(1, 2, 3, 4, 5, 6, d=7, e=100, f=200, hello='method1')
+
+
+print('\n ------ argshandler ------ \n')
+
+class SubA(argshandler(sig='self, b, c')):
+    def __init__(self, _self, b, c, **kwargs):
+        super(SubA, self).__init__(_self, b, c)
+
+class A():
+    @SubA.serve()
+    def func(self, a, b, *args, c, d=None, **kwargs):
+        print('a=', a)
+        print('b=', b)
+        print('args=', args)
+        print('c=', c)
+        print('d=', d)
+        print('kwargs=', kwargs)
+
+    def sub(self, b, c):
+        return SubA(self, b, c)
+
+
+sub = A().sub(b='bb', c='cc')
+
+for k in dir(SubA.func):
+    print('{}: {}'.format(k, getattr(SubA.func, k, None)))
+
+print('\n --- \n')
+for k in dir(sub.func):
+    print('{}: {}'.format(k, getattr(sub.func, k, None)))
+
+sub.func('aa', 1, 2, 3, d='dd', foo='bar', hello='world')
