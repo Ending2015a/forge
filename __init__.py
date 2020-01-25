@@ -230,7 +230,23 @@ def dictionarize(function, name: str=None, inputs: set=set()):
     return forged_class
     
 
+def set_parameterpack_warning_level(b):
+    '''
+    set warning level
 
+    Args:
+        b: (str or int)
+    '''
+    mapping = {'ERROR': 0, 'WARNING': 1, 'IGNORE': 2,
+               'error': 0, 'warning': 1, 'ignore': 2,
+               'e': 0, 'w': 1, 'i': 2}
+
+    if isinstance(b, str):
+        assert b in mapping.keys()
+        ParameterPack._warning_level = mapping[b]
+    else:
+        assert isinstance(b, int)
+        ParameterPack._warning_level = b
 
 class ParameterPack(OrderedDict):
     '''
@@ -239,6 +255,7 @@ class ParameterPack(OrderedDict):
     It's a kind of named tuple, but implemented using OrderedDict.
     '''
 
+    _warning_level = 0
 
     # === private member ===
     _parameterpack_scode_template = '''\
@@ -266,6 +283,32 @@ def {name}{signature}:
 
     def __iter__(self):
         yield from self.values()
+
+    def __getitem__(self, key):
+        if self.__class__._warning_level == 0:
+            return super(ParameterPack, self).__getitem__(key)
+        elif self.__class__._warning_level == 1:
+            try:
+                return super(ParameterPack, self).__getitem__(key)
+            except KeyError:
+                # print warning message and return None
+                print('WARN:: In forge.ParameterPack.__getitem__, unexisted key: {}'.format(key))
+                return None
+        else:
+            return super(ParameterPack, self).get(key, None)
+
+    def __getattr__(self, name):
+        if self.__class__._warning_level == 0:
+            return object.__getattribute__(self, name)
+        elif self.__class__._warning_level == 1:
+            try:
+                return object.__getattribute__(self, name)
+            except AttributeError:
+                # print warning message and return None
+                print('WARN:: In forge.ParameterPack.__getitem__, unexisted attribute: {}'.format(name))
+                return None
+        else:
+            return super(ParameterPack, self).get(name, None)
 
     def __setattr__(self, name, value):
         self.__setitem__(name, value)
