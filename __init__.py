@@ -5,6 +5,7 @@ import time
 import types
 import inspect
 import logging
+import traceback
 import functools
 
 from collections import OrderedDict
@@ -234,12 +235,17 @@ def set_parameterpack_warning_level(b):
     '''
     set warning level
 
+    ERROR: raise exception
+    WARNING: print warning info
+    WARN-V: print warning info and stack traces
+    IGNORE: ignore any exceptions
+
     Args:
         b: (str or int)
     '''
-    mapping = {'ERROR': 0, 'WARNING': 1, 'IGNORE': 2,
-               'error': 0, 'warning': 1, 'ignore': 2,
-               'e': 0, 'w': 1, 'i': 2}
+    mapping = {'ERROR': 0, 'WARNING': 1, 'WARN-V': 2, 'IGNORE': 3,
+               'error': 0, 'warning': 1, 'warn-v': 2, 'ignore': 3,
+               'e': 0, 'w': 1, 'wv': 2, 'i': 3}
 
     if isinstance(b, str):
         assert b in mapping.keys()
@@ -294,6 +300,15 @@ def {name}{signature}:
                 # print warning message and return None
                 print('WARN:: In forge.ParameterPack.__getitem__, unexisted key: {}'.format(key))
                 return None
+        elif self.__class__._warning_level == 2:
+            try:
+                return super(ParameterPack, self).__getitem__(key)
+            except KeyError:
+                # print warning message, stack traces and return None
+                print('WARN:: In forge.ParameterPack.__getitem__, unexisted key: {}'.format(key))
+                f = traceback.walk_stack(f=None).f_back
+                traceback.print_stack(f=f)
+                return None
         else:
             return super(ParameterPack, self).get(key, None)
 
@@ -306,6 +321,14 @@ def {name}{signature}:
             except AttributeError:
                 # print warning message and return None
                 print('WARN:: In forge.ParameterPack.__getitem__, unexisted attribute: {}'.format(name))
+                return None
+        elif self.__class__._warning_level == 2:
+            try:
+                return object.__getattribute__(self, name)
+            except AttributeError:
+                # print warning message, stack traces and return None
+                print('WARN:: In forge.ParameterPack.__getitem__, unexisted attribute: {}'.format(name))
+                traceback.print_stack(f=inspect.currentframe().f_back)
                 return None
         else:
             return super(ParameterPack, self).get(name, None)
