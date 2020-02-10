@@ -21,6 +21,22 @@ __all__ = [
     'argshandler',
 ]
 
+def _retrieve_outer_frame(outer=2):
+    frame = inspect.currentframe()
+    for i in range(outer):
+        if frame is None:
+            break
+        frame = frame.f_back
+
+    if frame is not None:
+
+        # frame info
+        frame = {
+            'filename': frame.f_code.co_filename,
+            'lineno': frame.f_lineno
+        }
+
+    return frame
 
 def _forge_func(name, source, kwargs, namespace):
 
@@ -298,16 +314,20 @@ def {name}{signature}:
                 return super(ParameterPack, self).__getitem__(key)
             except KeyError:
                 # print warning message and return None
-                print('WARN:: In forge.ParameterPack.__getitem__, unexisted key: {}'.format(key))
+                frame = _retrieve_outer_frame()
+                print('WARNING:forge:From {}:{}: unexisted key (from forge.ParameterPack.__getitem__): {}. '
+                                    'For more traceback info, please set_parameterpack_warning_level(2)'.format(
+                                                                frame['filename'], frame['lineno'], key))
                 return None
         elif self.__class__._warning_level == 2:
             try:
                 return super(ParameterPack, self).__getitem__(key)
             except KeyError:
                 # print warning message, stack traces and return None
-                print('WARN:: In forge.ParameterPack.__getitem__, unexisted key: {}'.format(key))
-                f = traceback.walk_stack(f=None).f_back
-                traceback.print_stack(f=f)
+                frame = _retrieve_outer_frame()
+                print('WARNING:forge:From {}:{}: unexisted key (from forge.ParameterPack.__getitem__): {}'.format(
+                                                                frame['filename'], frame['lineno'], key))
+                traceback.print_stack(f=inspect.currentframe().f_back)
                 return None
         else:
             return super(ParameterPack, self).get(key, None)
@@ -320,14 +340,18 @@ def {name}{signature}:
                 return object.__getattribute__(self, name)
             except AttributeError:
                 # print warning message and return None
-                print('WARN:: In forge.ParameterPack.__getitem__, unexisted attribute: {}'.format(name))
+                frame = _retrieve_outer_frame()
+                print('WARNING:forge:From {}:{}: unexisted name (from forge.ParameterPack.__getattr__): {}. '
+                                    'For more traceback info, please set_parameterpack_warning_level(2)'.format(
+                                                                frame['filename'], frame['lineno'], name))
                 return None
         elif self.__class__._warning_level == 2:
             try:
                 return object.__getattribute__(self, name)
             except AttributeError:
                 # print warning message, stack traces and return None
-                print('WARN:: In forge.ParameterPack.__getitem__, unexisted attribute: {}'.format(name))
+                print('WARNING:forge:From {}:{}: unexisted name (from forge.ParameterPack.__getattr__): {}.'.format(
+                                                                frame['filename'], frame['lineno'], name))
                 traceback.print_stack(f=inspect.currentframe().f_back)
                 return None
         else:
@@ -347,12 +371,12 @@ def {name}{signature}:
         Args:
             name: (str) property name
             target: (None or int or str) the target object the parameter pack will be attached to
-                int -> position arg, where 0 commonly refers to 'self'/'cls' (first positional arg) for class method
+                int -> position arg, where 0 commonly refers to `self` or `cls` (first positional arg) for class method
                 str -> arg name
-                None -> the parameter pack will be attached on method
+                None -> the parameter pack is attached on method
             unpack_kwargs: (bool) whether to unpack the variable-length keyword arguments
             store_kwargs: (bool) whether to store whole variable-length keyword arguments on self.[name].[kwargs]
-            ignore_first: (bool) whether to ignore the first variable
+            ignore_first: (bool) whether to ignore the first variable. This is usually used to avoid storing `self` or `cls`
             ignore: (a list of str) a list of variable names that should be ignored
 
         Returns:
@@ -364,7 +388,7 @@ def {name}{signature}:
         
         >>> class MyClass():
         ...
-        ...     @ParameterPack.pack(name='pack')   # name: property name in which the parameter pack will be stored
+        ...     @ParameterPack.pack(name='pack')   # name: property name on which the parameter pack is stored
         ...     def __init__(self, x, y, z, name=None, **kwargs):
         ...         pass
 
@@ -372,8 +396,8 @@ def {name}{signature}:
 
         >>> my_class = MyClass(1, 2, 3, m=10, n=20)
 
-        The ParameterPack.pack will pack all of the arguments listed in __init__(...) and store them in my_class.pack,
-        which will output the following contents if we print it out:
+        The ParameterPack.pack will pack all of the arguments listed in __init__(...) and store them on my_class.pack,
+        which outputs the following contents if we print it out:
 
         >>> print(my_class.pack)
         ParameterPack([('x', 1), ('y', 2), ('z', 3), ('name', None), ('kwargs', {'m':10, 'n':20})])
